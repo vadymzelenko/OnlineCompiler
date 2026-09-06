@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeBench — онлайн-компилятор</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: '#0F1115',
+          panel: '#171A20',
+          raised: '#1E222B',
+          line: '#2A2F3A',
+          fog: '#8B93A5',
+          chalk: '#E7E9EE',
+          amber: '#FFB454',
+          teal: '#4FD1C5',
+          rose: '#FF6B6B',
+        },
+        fontFamily: {
+          mono: ['"JetBrains Mono"', 'monospace'],
+          sans: ['Inter', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { background: #0F1115; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #171A20; }
+  ::-webkit-scrollbar-thumb { background: #2A2F3A; border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3A3F4C; }
+  textarea { caret-color: #FFB454; tab-size: 2; }
+  .tab-underline { position: relative; }
+  .tab-underline.active::after {
+    content: '';
+    position: absolute;
+    left: 0.9rem; right: 0.9rem; bottom: -1px;
+    height: 2px;
+    background: #FFB454;
+  }
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  .cursor-blink { animation: blink 1s step-end infinite; }
+  .spin { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="min-h-screen bg-ink text-chalk font-sans">
+
+<div class="max-w-[1400px] mx-auto px-4 md:px-6 py-5 flex flex-col min-h-screen">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-md bg-raised border border-line flex items-center justify-center font-mono text-amber font-bold">&gt;_</div>
+      <div>
+        <h1 class="font-mono text-lg font-semibold leading-none">CodeBench</h1>
+        <p class="text-xs text-fog mt-1">компилятор и просмотрщик баз данных в браузере</p>
+      </div>
+    </div>
+    <div class="hidden sm:block text-xs text-fog font-mono">Ctrl+Enter — запуск</div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="flex gap-1 border-b border-line mb-4 overflow-x-auto">
+    <button data-tab="cpp" class="tabbtn tab-underline active px-3.5 py-2.5 font-mono text-sm whitespace-nowrap text-chalk">C++</button>
+    <button data-tab="js" class="tabbtn tab-underline px-3.5 py-2.5 font-mono text-sm whitespace-nowrap text-fog">JavaScript</button>
+    <button data-tab="py" class="tabbtn tab-underline px-3.5 py-2.5 font-mono text-sm whitespace-nowrap text-fog">Python</button>
+    <button data-tab="sql" class="tabbtn tab-underline px-3.5 py-2.5 font-mono text-sm whitespace-nowrap text-fog">SQL / база данных</button>
+  </nav>
+
+  <!-- CODE PANELS (cpp / js / py) -->
+  <div id="code-panels" class="flex-1 flex flex-col">
+    <div class="flex items-center gap-2 mb-2 flex-wrap">
+      <button id="runBtn" class="inline-flex items-center gap-2 bg-amber text-ink font-mono text-sm font-semibold px-4 py-1.5 rounded hover:brightness-110 transition">
+        <span id="runIcon">▶</span><span id="runLabel">Запустить</span>
+      </button>
+      <button id="clearBtn" class="font-mono text-sm px-3 py-1.5 rounded border border-line text-fog hover:text-chalk hover:border-fog transition">Очистить вывод</button>
+      <span id="engineStatus" class="text-xs text-fog font-mono ml-1"></span>
+      <div class="flex-1"></div>
+      <span id="langNote" class="text-xs text-fog max-w-md text-right hidden sm:block"></span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-[420px]">
+      <div class="flex flex-col rounded-lg border border-line bg-panel overflow-hidden">
+        <div class="px-3 py-1.5 border-b border-line text-xs font-mono text-fog flex items-center justify-between">
+          <span id="editorLabel">main.cpp</span>
+          <span class="flex gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose/70"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber/70"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-teal/70"></span>
+          </span>
+        </div>
+        <textarea id="editor" spellcheck="false" class="flex-1 bg-panel text-chalk font-mono text-[13px] leading-relaxed p-4 outline-none resize-none min-h-[320px]"></textarea>
+      </div>
+
+      <div class="flex flex-col rounded-lg border border-line bg-panel overflow-hidden">
+        <div class="px-3 py-1.5 border-b border-line text-xs font-mono text-fog flex items-center justify-between">
+          <span>консоль вывода</span>
+          <span id="stdinToggleWrap" class="hidden sm:inline"></span>
+        </div>
+        <pre id="output" class="flex-1 font-mono text-[13px] leading-relaxed p-4 overflow-auto whitespace-pre-wrap min-h-[220px] text-chalk/90"></pre>
+        <div id="stdinArea" class="border-t border-line hidden">
+          <div class="px-3 pt-2 text-xs font-mono text-fog">stdin (для cin / input, по одному значению на строку или через пробел)</div>
+          <textarea id="stdinBox" spellcheck="false" class="w-full bg-raised text-chalk font-mono text-[12px] p-2.5 outline-none resize-none h-16"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SQL PANEL -->
+  <div id="sql-panel" class="hidden flex-1 flex flex-col gap-3">
+    <div class="flex items-center gap-2 flex-wrap">
+      <button id="sqlRunBtn" class="inline-flex items-center gap-2 bg-teal text-ink font-mono text-sm font-semibold px-4 py-1.5 rounded hover:brightness-110 transition">▶ Выполнить</button>
+      <button id="sqlResetBtn" class="font-mono text-sm px-3 py-1.5 rounded border border-line text-fog hover:text-chalk hover:border-fog transition">Новая демо-база</button>
+      <label class="font-mono text-sm px-3 py-1.5 rounded border border-line text-fog hover:text-chalk hover:border-fog transition cursor-pointer">
+        Загрузить .sqlite/.db
+        <input id="sqlFileInput" type="file" accept=".sqlite,.db,.sqlite3" class="hidden">
+      </label>
+      <button id="sqlExportBtn" class="font-mono text-sm px-3 py-1.5 rounded border border-line text-fog hover:text-chalk hover:border-fog transition">Скачать базу</button>
+      <span id="sqlStatus" class="text-xs text-fog font-mono ml-1"></span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-3 flex-1 min-h-[420px]">
+      <!-- schema browser -->
+      <div class="rounded-lg border border-line bg-panel overflow-hidden flex flex-col">
+        <div class="px-3 py-1.5 border-b border-line text-xs font-mono text-fog">таблицы</div>
+        <div id="tableList" class="flex-1 overflow-auto p-2 space-y-1 text-sm font-mono"></div>
+      </div>
+
+      <div class="flex flex-col gap-3">
+        <div class="rounded-lg border border-line bg-panel overflow-hidden">
+          <div class="px-3 py-1.5 border-b border-line text-xs font-mono text-fog">SQL-запрос</div>
+          <textarea id="sqlEditor" spellcheck="false" class="w-full bg-panel text-chalk font-mono text-[13px] leading-relaxed p-4 outline-none resize-none h-32"></textarea>
+        </div>
+        <div class="rounded-lg border border-line bg-panel overflow-hidden flex-1 flex flex-col">
+          <div class="px-3 py-1.5 border-b border-line text-xs font-mono text-fog">результат</div>
+          <div id="sqlResult" class="flex-1 overflow-auto p-3 text-sm font-mono min-h-[200px]"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="mt-5 text-xs text-fog font-mono">
+    C++ выполняется упрощённым интерпретатором подмножества языка (без классов, указателей и STL, кроме базового vector) · Python — через Pyodide (CPython/WASM) · SQL — через sql.js (SQLite/WASM)
+  </footer>
+</div>
+
+<script>
+/* =========================================================
+   ОБЩЕЕ: вкладки
+   ========================================================= */
+const samples = {
+  cpp: `#include <iostream>
+using namespace std;
+
+int factorial(int n) {
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}
+
+int main() {
+    cout << "Привет из C++!" << endl;
+
+    int sum = 0;
+    for (int i = 1; i <= 5; i++) {
+        sum += i;
+    }
+    cout << "Сумма 1..5 = " << sum << endl;
+
+    cout << "5! = " << factorial(5) << endl;
+
+    vector<int> nums;
+    nums.push_back(10);
+    nums.push_back(20);
+    nums.push_back(30);
+    for (int i = 0; i < nums.size(); i++) {
+        cout << "nums[" << i << "] = " << nums[i] << endl;
+    }
+
+    return 0;
+}
+`,
+  js: `// JavaScript выполняется нативно в браузере
+function fib(n) {
+  return n <= 1 ? n : fib(n - 1) + fib(n - 2);
+}
+
+console.log("Привет из JavaScript!");
+for (let i = 0; i < 8; i++) {
+  console.log(\`fib(\${i}) = \${fib(i)}\`);
+}
+
+const nums = [5, 3, 9, 1, 7];
+console.log("Отсортировано:", [...nums].sort((a, b) => a - b));
+`,
+  py: `# Python выполняется через Pyodide (CPython, скомпилированный в WebAssembly)
+def fizzbuzz(n):
+    for i in range(1, n + 1):
+        if i % 15 == 0:
+            print("FizzBuzz")
+        elif i % 3 == 0:
+            print("Fizz")
+        elif i % 5 == 0:
+            print("Buzz")
+        else:
+            print(i)
+
+print("Привет из Python!")
+fizzbuzz(20)
+
+squares = [x**2 for x in range(1, 6)]
+print("Квадраты:", squares)
+`,
+};
+
+const editorLabels = { cpp: 'main.cpp', js: 'main.js', py: 'main.py' };
+const langNotes = {
+  cpp: 'Упрощённый интерпретатор C++: переменные, циклы, if/else, функции, cout/cin, базовый vector.',
+  js: 'Выполняется напрямую в браузере (изолированная функция).',
+  py: 'Первый запуск загружает движок Pyodide (~10–20 сек), дальше — быстро.',
+};
+
+let currentLang = 'cpp';
+const editorState = { cpp: samples.cpp, js: samples.js, py: samples.py };
+
+const editorEl = document.getElementById('editor');
+const outputEl = document.getElementById('output');
+const editorLabelEl = document.getElementById('editorLabel');
+const langNoteEl = document.getElementById('langNote');
+const engineStatusEl = document.getElementById('engineStatus');
+const stdinArea = document.getElementById('stdinArea');
+const stdinBox = document.getElementById('stdinBox');
+const stdinToggleWrap = document.getElementById('stdinToggleWrap');
+
+function renderTabs() {
+  document.querySelectorAll('.tabbtn').forEach(btn => {
+    const isActive = btn.dataset.tab === (currentLang === 'sql' ? 'sql' : currentLang);
+    btn.classList.toggle('active', isActive);
+    btn.classList.toggle('text-chalk', isActive);
+    btn.classList.toggle('text-fog', !isActive);
+  });
+}
+
+function switchTab(tab) {
+  if (tab === 'sql') {
+    document.getElementById('code-panels').classList.add('hidden');
+    document.getElementById('sql-panel').classList.remove('hidden');
+    currentLang = 'sql';
+    renderTabs();
+    return;
+  }
+  document.getElementById('sql-panel').classList.add('hidden');
+  document.getElementById('code-panels').classList.remove('hidden');
+
+  if (currentLang !== 'sql') editorState[currentLang] = editorEl.value;
+  currentLang = tab;
+  editorEl.value = editorState[tab];
+  editorLabelEl.textContent = editorLabels[tab];
+  langNoteEl.textContent = langNotes[tab];
+  langNoteEl.classList.remove('hidden');
+  stdinArea.classList.toggle('hidden', tab !== 'cpp');
+  engineStatusEl.textContent = tab === 'py' && pyodideInstance ? 'Pyodide готов' : '';
+  renderTabs();
+}
+
+document.querySelectorAll('.tabbtn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+editorEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = editorEl.selectionStart, end = editorEl.selectionEnd;
+    editorEl.value = editorEl.value.slice(0, start) + '  ' + editorEl.value.slice(end);
+    editorEl.selectionStart = editorEl.selectionEnd = start + 2;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runCurrent();
+  }
+});
+
+switchTab('cpp');
+
+/* =========================================================
+   ВЫВОД В КОНСОЛЬ
+   ========================================================= */
+function appendOutput(text, isError) {
+  const span = document.createElement('span');
+  span.textContent = text;
+  if (isError) span.className = 'text-rose';
+  outputEl.appendChild(span);
+  outputEl.scrollTop = outputEl.scrollHeight;
+}
+function clearOutput() { outputEl.innerHTML = ''; }
+document.getElementById('clearBtn').addEventListener('click', clearOutput);
+
+function setRunning(isRunning) {
+  const icon = document.getElementById('runIcon');
+  const label = document.getElementById('runLabel');
+  const btn = document.getElementById('runBtn');
+  btn.disabled = isRunning;
+  btn.classList.toggle('opacity-60', isRunning);
+  icon.textContent = isRunning ? '◐' : '▶';
+  icon.classList.toggle('spin', isRunning);
+  label.textContent = isRunning ? 'Выполняется…' : 'Запустить';
+}
+
+/* =========================================================
+   JAVASCRIPT
+   ========================================================= */
+function runJS(code) {
+  const logs = [];
+  const fmt = (a) => {
+    if (typeof a === 'object' && a !== null) {
+      try { return JSON.stringify(a); } catch { return String(a); }
+    }
+    return String(a);
+  };
+  const fakeConsole = {
+    log: (...args) => appendOutput(args.map(fmt).join(' ') + '\n'),
+    error: (...args) => appendOutput(args.map(fmt).join(' ') + '\n', true),
+    warn: (...args) => appendOutput(args.map(fmt).join(' ') + '\n'),
+    info: (...args) => appendOutput(args.map(fmt).join(' ') + '\n'),
+  };
+  try {
+    const fn = new Function('console', code);
+    fn(fakeConsole);
+  } catch (e) {
+    appendOutput('Ошибка: ' + e.message + '\n', true);
+  }
+}
+
+/* =========================================================
+   PYTHON (Pyodide)
+   ========================================================= */
+let pyodideInstance = null;
+let pyodideLoading = null;
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) { existing.addEventListener('load', resolve); if (existing.dataset.loaded) resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+    s.onerror = () => reject(new Error('Не удалось загрузить ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+async function getPyodide() {
+  if (pyodideInstance) return pyodideInstance;
+  if (pyodideLoading) return pyodideLoading;
+  pyodideLoading = (async () => {
+    engineStatusEl.textContent = 'Загрузка Pyodide…';
+    await loadScriptOnce('https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js');
+    const inst = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
+    inst.setStdout({ batched: (s) => appendOutput(s + '\n') });
+    inst.setStderr({ batched: (s) => appendOutput(s + '\n', true) });
+    pyodideInstance = inst;
+    engineStatusEl.textContent = 'Pyodide готов';
+    return inst;
+  })();
+  return pyodideLoading;
+}
+
+async function runPython(code) {
+  try {
+    const py = await getPyodide();
+    await py.runPythonAsync(code);
+  } catch (e) {
+    appendOutput('Ошибка: ' + (e && e.message ? e.message : String(e)) + '\n', true);
+  }
+}
+
+/* =========================================================
+   C++ — упрощённый транспилятор подмножества в JS
+   ========================================================= */
+function transpileCpp(src) {
+  let s = src;
+
+  // комментарии
+  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
+  s = s.replace(/\/\/.*$/gm, '');
+
+  // препроцессор и служебное
+  s = s.replace(/^\s*#.*$/gm, '');
+  s = s.replace(/using\s+namespace\s+std\s*;/g, '');
+  s = s.replace(/std::/g, '');
+  s = s.replace(/\bNULL\b/g, 'null');
+  s = s.replace(/\bnullptr\b/g, 'null');
+
+  // printf
+  s = s.replace(/\bprintf\s*\(/g, '__printf(');
+
+  // массивы фиксированного размера: int arr[5];
+  s = s.replace(/\b(int|double|float|bool|char|long|short)\s+(\w+)\s*\[\s*(\d+)\s*\]\s*;/g,
+    (m, t, name, size) => `let ${name} = new Array(${size}).fill(0);`);
+  // массивы с инициализатором: int arr[] = {1,2,3};
+  s = s.replace(/\b(int|double|float|bool|char|long|short)\s+(\w+)\s*\[\s*\]\s*=\s*\{([^}]*)\}\s*;/g,
+    (m, t, name, vals) => `let ${name} = [${vals}];`);
+
+  // vector<T> name;  /  vector<T> name = {...};
+  s = s.replace(/\bvector\s*<[^>]*>\s*(\w+)/g, 'let $1');
+  s = s.replace(/\.push_back\s*\(/g, '.push(');
+  s = s.replace(/\.size\s*\(\s*\)/g, '.length');
+
+  // определения функций: TYPE name(params) {
+  s = s.replace(/\b(int|void|double|float|bool|char|long|short|string|auto)\s+(\w+)\s*\(([^)]*)\)\s*\{/g,
+    (m, ret, name, params) => {
+      const cleaned = params.split(',').map(p => {
+        p = p.trim();
+        if (!p) return '';
+        p = p.replace(/^(const\s+)?(int|double|float|bool|char|long|short|string|auto|size_t|unsigned)\s*[\*&]?\s*/, '');
+        p = p.replace(/\[\]/g, '');
+        return p.trim();
+      }).filter(Boolean).join(', ');
+      return `function ${name}(${cleaned}) {`;
+    });
+
+  // объявления переменных: TYPE name ...
+  s = s.replace(/\b(int|double|float|bool|char|long|short|string|auto|size_t|unsigned)\s+(?=[A-Za-z_])/g, 'let ');
+
+  // cout << a << b << endl;
+  s = s.replace(/cout\s*<<([\s\S]*?);/g, (m, expr) => {
+    const parts = expr.split('<<').map(p => p.trim()).filter(p => p.length > 0);
+    return `__print(${parts.join(', ')});`;
+  });
+
+  // cin >> a >> b;
+  s = s.replace(/cin\s*>>([\s\S]*?);/g, (m, expr) => {
+    const vars = expr.split('>>').map(p => p.trim()).filter(Boolean);
+    return vars.map(v => `${v} = __input();`).join(' ');
+  });
+
+  return s;
+}
+
+function runCpp(code, stdinText) {
+  const transpiled = transpileCpp(code);
+
+  const inputTokens = (stdinText || '').trim().split(/\s+/).filter(Boolean);
+  let inputPtr = 0;
+  const __input = () => {
+    const tok = inputTokens[inputPtr++];
+    if (tok === undefined) return 0;
+    const num = Number(tok);
+    return Number.isNaN(num) ? tok : num;
+  };
+  const __print = (...args) => {
+    appendOutput(args.map(a => (a === undefined ? '' : String(a))).join(''));
+  };
+  const __printf = (fmt, ...args) => {
+    let i = 0;
+    const out = String(fmt).replace(/%[dsfic]/g, () => {
+      const v = args[i++];
+      return v === undefined ? '' : String(v);
+    });
+    appendOutput(out);
+  };
+  const endl = '\n';
+  const true_ = true, false_ = false;
+
+  const runner = `
+    "use strict";
+    ${transpiled}
+    if (typeof main === 'function') { main(); }
+  `;
+
+  try {
+    const fn = new Function('__print', '__input', '__printf', 'endl', runner);
+    fn(__print, __input, __printf, endl);
+  } catch (e) {
+    appendOutput('Ошибка выполнения: ' + e.message + '\n', true);
+    appendOutput('(это упрощённый интерпретатор подмножества C++ — сложные конструкции могут не поддерживаться)\n', true);
+  }
+}
+
+/* =========================================================
+   ЗАПУСК
+   ========================================================= */
+async function runCurrent() {
+  clearOutput();
+  const code = editorEl.value;
+  setRunning(true);
+  try {
+    if (currentLang === 'cpp') {
+      runCpp(code, stdinBox.value);
+    } else if (currentLang === 'js') {
+      runJS(code);
+    } else if (currentLang === 'py') {
+      await runPython(code);
+    }
+  } finally {
+    setRunning(false);
+  }
+}
+document.getElementById('runBtn').addEventListener('click', runCurrent);
+
+/* =========================================================
+   SQL / sql.js
+   ========================================================= */
+let SQLLib = null;
+let db = null;
+const sqlStatusEl = document.getElementById('sqlStatus');
+const tableListEl = document.getElementById('tableList');
+const sqlResultEl = document.getElementById('sqlResult');
+const sqlEditorEl = document.getElementById('sqlEditor');
+
+sqlEditorEl.value = `SELECT users.name, orders.product, orders.amount
+FROM orders
+JOIN users ON users.id = orders.user_id
+ORDER BY orders.amount DESC;`;
+
+sqlEditorEl.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    runSqlQuery();
+  }
+});
+
+async function getSQLLib() {
+  if (SQLLib) return SQLLib;
+  sqlStatusEl.textContent = 'Загрузка sql.js…';
+  await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js');
+  SQLLib = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
+  sqlStatusEl.textContent = 'готово';
+  return SQLLib;
+}
+
+function createSampleData(database) {
+  database.run(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, age INTEGER);
+    INSERT INTO users (name, email, age) VALUES
+      ('Анна Ковалёва', 'anna@example.com', 29),
+      ('Дмитрий Орлов', 'dmitry@example.com', 34),
+      ('Ирина Смирнова', 'irina@example.com', 41);
+
+    CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER, product TEXT, amount REAL);
+    INSERT INTO orders (user_id, product, amount) VALUES
+      (1, 'Клавиатура', 49.90),
+      (1, 'Монитор', 219.00),
+      (2, 'Мышь', 19.90),
+      (3, 'Наушники', 89.00),
+      (3, 'Веб-камера', 34.50);
+  `);
+}
+
+async function initDb(withSample) {
+  const lib = await getSQLLib();
+  db = new lib.Database();
+  if (withSample) createSampleData(db);
+  refreshTableList();
+  sqlResultEl.innerHTML = '<div class="text-fog">Выполните запрос, чтобы увидеть результат.</div>';
+}
+
+function refreshTableList() {
+  tableListEl.innerHTML = '';
+  if (!db) return;
+  let res;
+  try {
+    res = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+  } catch (e) {
+    return;
+  }
+  if (!res.length) {
+    tableListEl.innerHTML = '<div class="text-fog text-xs">нет таблиц</div>';
+    return;
+  }
+  res[0].values.forEach(row => {
+    const name = row[0];
+    const btn = document.createElement('button');
+    btn.textContent = name;
+    btn.className = 'block w-full text-left px-2 py-1.5 rounded hover:bg-raised text-chalk/90 truncate';
+    btn.addEventListener('click', () => {
+      sqlEditorEl.value = `SELECT * FROM ${name} LIMIT 100;`;
+      runSqlQuery();
+    });
+    tableListEl.appendChild(btn);
+  });
+}
+
+function renderSqlResults(results) {
+  sqlResultEl.innerHTML = '';
+  if (!results || !results.length) {
+    sqlResultEl.innerHTML = '<div class="text-fog">Запрос выполнен, строк не возвращено.</div>';
+    return;
+  }
+  results.forEach(res => {
+    const wrap = document.createElement('div');
+    wrap.className = 'mb-4 overflow-auto';
+    const table = document.createElement('table');
+    table.className = 'min-w-full border-collapse text-left';
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    res.columns.forEach(col => {
+      const th = document.createElement('th');
+      th.textContent = col;
+      th.className = 'border-b border-line px-2.5 py-1.5 text-teal font-semibold sticky top-0 bg-panel';
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    res.values.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.className = 'odd:bg-raised/40';
+      row.forEach(cell => {
+        const td = document.createElement('td');
+        td.textContent = cell === null ? 'NULL' : String(cell);
+        td.className = 'px-2.5 py-1.5 border-b border-line/60 text-chalk/90 whitespace-nowrap';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    sqlResultEl.appendChild(wrap);
+  });
+}
+
+async function runSqlQuery() {
+  if (!db) await initDb(true);
+  const query = sqlEditorEl.value;
+  try {
+    const results = db.exec(query);
+    renderSqlResults(results);
+    refreshTableList();
+    sqlStatusEl.textContent = 'выполнено';
+  } catch (e) {
+    sqlResultEl.innerHTML = `<div class="text-rose">Ошибка: ${e.message}</div>`;
+  }
+}
+
+document.getElementById('sqlRunBtn').addEventListener('click', runSqlQuery);
+document.getElementById('sqlResetBtn').addEventListener('click', () => initDb(true));
+
+document.getElementById('sqlFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const lib = await getSQLLib();
+  const buf = await file.arrayBuffer();
+  try {
+    db = new lib.Database(new Uint8Array(buf));
+    refreshTableList();
+    sqlResultEl.innerHTML = '<div class="text-fog">База загружена. Выберите таблицу слева или выполните запрос.</div>';
+    sqlStatusEl.textContent = 'файл загружен: ' + file.name;
+  } catch (err) {
+    sqlResultEl.innerHTML = `<div class="text-rose">Не удалось открыть файл: ${err.message}</div>`;
+  }
+});
+
+document.getElementById('sqlExportBtn').addEventListener('click', () => {
+  if (!db) return;
+  const data = db.export();
+  const blob = new Blob([data], { type: 'application/x-sqlite3' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'database.sqlite';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// первичная инициализация БД (без блокировки интерфейса)
+initDb(true);
+</script>
+</body>
+</html>

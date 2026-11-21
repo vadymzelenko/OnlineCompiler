@@ -1,3 +1,5 @@
+import os
+
 import redis
 import json
 from celery import Celery
@@ -5,14 +7,12 @@ from compiles.pyCompile import run_py
 from compiles.jsCompile import run_js
 from compiles.cppCompile import run_cpp
 
-celery_app = Celery(
-    "tasks",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0"
-)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+celery_app = Celery("tasks", broker=f"{REDIS_URL}/0", backend=f"{REDIS_URL}/0")
 
 # Redis Pub/Sub
-redis_pub = redis.Redis(host="localhost", port=6379, db=1)
+redis_pub = redis.Redis.from_url(REDIS_URL, db=1)
 
 @celery_app.task(bind=True)
 def execute_task(self, request):
@@ -32,6 +32,4 @@ def execute_task(self, request):
         }
 
     redis_pub.publish(f"task:{self.request.id}", json.dumps(result))
-    print("Publishing to Redis channel:", f"task:{self.request.id}")
-    print("Message:", result)
     return result

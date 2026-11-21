@@ -1,11 +1,10 @@
 import os
-import time
+import shutil
 import subprocess
+import tempfile
+import time
 
 def run_code_in_sandbox(code: str, lang: str) -> dict:
-    temp_dir = f"./sandbox/temp"
-    os.makedirs(temp_dir, exist_ok=True)
-
     lang_map = {
         "py": {"ext": "py", "file": "run.py", "docker": "sandbox_python"},
         "cpp": {"ext": "cpp", "file": "main.cpp", "docker": "sandbox_cpp"},
@@ -21,6 +20,8 @@ def run_code_in_sandbox(code: str, lang: str) -> dict:
     target_file = lang_map[lang]["file"]
     docker_image = lang_map[lang]["docker"]
 
+    # A separate directory per run, so parallel tasks never overwrite each other's code.
+    temp_dir = tempfile.mkdtemp(prefix="run-", dir=os.getenv("SANDBOX_TMP", None))
     temp_code_file = os.path.join(temp_dir, target_file)
 
     with open(temp_code_file, "w") as f:
@@ -58,3 +59,6 @@ def run_code_in_sandbox(code: str, lang: str) -> dict:
             "output": f"Docker error: {str(e)}",
             "time": "0 sec"
         }
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)

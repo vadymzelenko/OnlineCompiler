@@ -1,53 +1,23 @@
-# Online Compiler
-![image](https://github.com/user-attachments/assets/bb8a9f8a-661c-4a65-9af1-ac2987badff0)
+# Prototypes
 
-## Overview
-This project is a multi-language online code editor supporting C++, JavaScript, and Python. Users can write code in a web-based editor, execute it on the server, and see the output in real-time. The project is built using Flask, Flask-SocketIO, and CodeMirror for syntax highlighting and code editing.
+The first iterations of the online compiler, written with Flask. They run user code directly on the host with `subprocess` and have no isolation, so they are kept for reference only. The production-oriented version is [`docker-sandbox`](../docker-sandbox).
 
-## Features
-- **Real-time Code Execution**: Users can write code in C++, JavaScript, or Python and run it on the server.
-- **Syntax Highlighting**: Provided by CodeMirror, with theme toggling between light and dark modes.
-- **Input Handling**: Users can provide input to their code through the interface.
-- **File Saving**: Users can save their code to a local file.
-- **Live Output**: Output is displayed live, including any errors or results from the code execution.
+| Path | Description |
+|---|---|
+| `Compiler/` | Flask + Socket.IO servers per language (`python.py`, `cpp.py`, `js.py`) with live output and interactive input |
+| `CompilerProject/` | Single-page variant with a shared editor |
+| `forPython/`, `forCPP/`, `forJS/` | Minimal per-language servers |
+| `newdesig/` | Static redesign of the editor UI |
+| `DynamicResultCode.py`, `main.js` | Early experiment with streaming output over Socket.IO |
 
-## Technologies Used
-- **Frontend**: HTML, CSS (with theme switching), CodeMirror for code editing.
-- **Backend**: Flask, Flask-SocketIO for real-time communication.
-- **Languages Supported**: C++, JavaScript, Python.
+## Running
 
-## Installation
-1. Clone the repository:
-2. Install the required dependencies:
-   ```bash
-   pip install flask flask-socketio
-   ```
-3. Start the servers for each language:
-   - For C++:
-     ```bash
-     python cpp.py
-     ```
-   - For JavaScript:
-     ```bash
-     python js.py
-     ```
-   - For Python:
-     ```bash
-     python python.py
-     ```
+```bash
+pip install flask flask-socketio
+cd Compiler
+python python.py      # http://localhost:5003 (cpp.py: 5001, js.py: 5002)
+```
 
-## Usage
-- Navigate to the corresponding URLs for each language:
-  - C++: `http://127.0.0.1:5001`
-  - JavaScript: `http://127.0.0.1:5002`
-  - Python: `http://127.0.0.1:5003`
+Requires Python 3, `g++` and Node.js on the machine for C++ and JavaScript execution.
 
-Once on the page:
-1. Write your code in the editor.
-2. Click **Run** to execute the code.
-3. Provide any input required by the program and see the output displayed in real-time.
-
-## Future Enhancements
-- Add support for additional languages.
-- Implement more advanced error handling.
-- Improve UI responsiveness across different devices.
+Do not deploy these servers publicly: submitted code runs with the permissions of the server process.

@@ -1,4 +1,7 @@
+import asyncio
+import json
 import logging
+import os
 import redis.asyncio as aioredis
 from fastapi import FastAPI, WebSocket, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,11 +11,13 @@ from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://onlinecompiler-895n.onrender.com"],
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,10 +30,7 @@ def root():
 @app.post("/execute")
 async def execute_code(request: dict, background_tasks: BackgroundTasks):
     """Accepts code, sends to Celery"""
-    logging.info(f"Request receivd: {request}")
-
-    print(request)
-
+    logging.info("Execute request: language_id=%s", request.get("language_id"))
     task = execute_task.delay(request)
     return {"task_id": task.id}
 
@@ -56,22 +58,21 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
     """WebSocket for Redis Pub/Sub"""
     await websocket.accept()
 
-    redis = await aioredis.create_redis("redis://localhost:6379/1")
-    res = await redis.subscribe(f"task:{task_id}")
-    ch = res[0]
+    client = aioredis.from_url(REDIS_URL, db=1)
+    pubsub = client.pubsub()
+    await pubsub.subscribe(f"task:{task_id}")
 
     try:
-        for _ in range(10):  # max 5 секунд ожидания
-            if await ch.wait_message():
-                msg = await ch.get_json()
-                await websocket.send_json(msg)
+        for _ in range(20):  # wait up to ~10 seconds
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.5)
+            if message:
+                await websocket.send_json(json.loads(message["data"]))
                 break
             await asyncio.sleep(0.5)
     except Exception as e:
-        await websocket.send_json({"status": "error", "output": f"WebSocket error: {str(e)}"})
+        await websocket.send_json({"status": "error", "output": f"WebSocket error: {e}"})
     finally:
-        await redis.unsubscribe(f"task:{task_id}")
-        redis.close()
-        await redis.wait_closed()
+        await pubsub.unsubscribe(f"task:{task_id}")
+        await pubsub.aclose()
+        await client.aclose()
         await websocket.close()
-

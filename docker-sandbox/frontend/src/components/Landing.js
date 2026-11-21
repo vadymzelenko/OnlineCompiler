@@ -2,6 +2,8 @@ import React, {useEffect, useRef, useState} from "react";
 import CodeEditorWindow from "./CodeEditorWindow";
 import './Landing.css'
 import axios from "axios";
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
 import {classnames} from "../utils/general";
 import {languageOptions} from "../constants/languageOptions";
 import {ToastContainer, toast} from "react-toastify";
@@ -89,7 +91,7 @@ const Landing = () => {
         };
 
         try {
-            const response = await axios.post("https://backend-compiler.vzbb.site/execute", payload, {
+            const response = await axios.post(`${API_URL}/execute`, payload, {
                 headers: {"Content-Type": "application/json"}
             });
 
@@ -100,7 +102,7 @@ const Landing = () => {
             while (attempts > 0) {
                 await new Promise((resolve) => setTimeout(resolve, 1000)); // Ждём 1 сек
 
-                const resultResponse = await axios.get(`https://backend-compiler.vzbb.site/result/${taskId}`);
+                const resultResponse = await axios.get(`${API_URL}/result/${taskId}`);
                 if (resultResponse.data.status !== "processing") {
                     result = resultResponse.data;
                     break;
